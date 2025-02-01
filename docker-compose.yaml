@@ -1,0 +1,100 @@
+x-project-name: &project_name flix-tube
+
+services:
+
+  # MySQL Service
+  mysql:
+    image: mysql:8.0
+    container_name: flix-tube_mysql
+    ports:
+      - "3308:3306"  # Map local port 3308 to MySQL's default port 3306
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: flix_tube
+      MYSQL_USER: yash
+      MYSQL_PASSWORD: 1234
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - my_network
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "3309:8080"  # Access Adminer on localhost:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: "host.docker.internal:3308"
+      ADMINER_DESIGN: galkaev
+  # Elasticsearch Service
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.9
+    container_name: flix-tube_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - my_network
+
+  # Kibana Service
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.9
+    container_name: flix-tube_kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - my_network
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+#      KAFKA_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://0.0.0.0:29092 #PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092 # Working PLAINTEXT://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_MESSAGE_MAX_BYTES: 52428800  # 5 MB
+      KAFKA_MAX_REQUEST_SIZE: 52428800    # 5 MB
+      KAFKA_MAX_PARTITION_FETCH_BYTES: 52428800  # 5 MB
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8091:8080"
+    depends_on:
+      - kafka
+# Volumes for persistent data
+volumes:
+  mysql_data:
+  es_data:
+
+# Define the network
+networks:
+  my_network:
+    driver: bridge
+
